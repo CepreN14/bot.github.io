@@ -30,7 +30,7 @@ def is_admin(user_id):
 
 def get_user_from_api(telegram_id):
     try:
-        api_url = f'http://127.0.0.1:8000/api/users/{telegram_id}'
+        api_url = f'https://Werdsaf.pythonanywhere.com/api/users/{telegram_id}'
         response = requests.get(api_url)
         response.raise_for_status()
         return response.json()
@@ -40,11 +40,11 @@ def get_user_from_api(telegram_id):
 
 def is_developer(user_id):
     user = get_user_from_api(user_id)
-    return user and user.get('role') == "DEVELOPER"
+    return user and user.get('role') == "developer"
 
 def is_customer(user_id):
     user = get_user_from_api(user_id)
-    return user and user.get('role') == "CUSTOMER"
+    return user and user.get('role') == "customer"
 
 # --- Обработчики ---
 async def start(update: Update, context: CallbackContext):
@@ -61,7 +61,7 @@ async def start(update: Update, context: CallbackContext):
             ["Разработчик", "Заказчик"]
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
-        await update.message.reply_text("Пожалуйста, выберите свою роль:", reply_markup=reply_markup)
+        await update.message.reply_text("Пожалуйста, выберите свою роль:", reply_markup=keyboard)
         return SET_ROLE
 
     role = user.get('role')
@@ -138,7 +138,7 @@ async def set_working_hours_end(update: Update, context: CallbackContext):
             "display_name": user_name,
             "timezone": timezone,
             "working_hours_start": start_time.strftime("%H:%M") if start_time else None,  # Format time as string
-            "working_hours_end": end_time.strftime("%H:%M") if end_time else None    # Format time as string
+            "working_hours_end": end_time.strftime("%H:%M") if end_time else None
         }
 
         # Log the data being sent
@@ -147,7 +147,7 @@ async def set_working_hours_end(update: Update, context: CallbackContext):
         # Вызов API Flask backend
         try:
             #  API Endpoint URL
-            api_url = 'http://127.0.0.1:8000/api/users'  # Используем порт 8000
+            api_url = f'https://Werdsaf.pythonanywhere.com/api/users'  # Используем порт 8000
             headers = {'Content-Type': 'application/json'}
             response = requests.post(api_url, headers=headers, data=json.dumps(user_data))
             response.raise_for_status()  # Вызвать исключение для плохих кодов статуса
@@ -172,7 +172,7 @@ async def help_command(update: Update, context: CallbackContext):
             "/help - Помощь\n"
             "/create_room [Название комнаты] - Создать комнату (только для администраторов)\n"
             "/list_rooms - Список комнат, в которых вы состоите\n"
-            "/show_users - Посмотреть ID пользователей"
+            "/list_users - Список пользователей с ID (только для администраторов)"
         )
     elif is_developer(user_id):
         await update.message.reply_text(
@@ -189,6 +189,28 @@ async def help_command(update: Update, context: CallbackContext):
             "/list_rooms - Список комнат, в которых вы состоите"
         )
 
+async def list_users(update: Update, context: CallbackContext):
+    """Lists all users and their IDs to the admin."""
+    logging.info("Обработка команды /list_users")  # Добавлено логирование
+    user_id = update.message.from_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("У вас нет прав для просмотра списка пользователей.")
+        return
+
+    try:
+        api_url = f'https://Werdsaf.pythonanywhere.com/api/users'  # Используем порт 8000
+        response = requests.get(api_url)
+        response.raise_for_status()
+        users = response.json()
+        if users:
+            user_list = "\n".join([f"- {user['display_name']} (ID: {user['telegram_id']})" for user in users])
+            await update.message.reply_text(f"Список пользователей:\n{user_list}")
+        else:
+            await update.message.reply_text("Пользователи не найдены.")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Ошибка при получении списка пользователей: {e}")
+        await update.message.reply_text(f"Произошла ошибка при получении списка пользователей: {e}")
+
 async def create_room(update: Update, context: CallbackContext):
     """Обрабатывает команду /create_room."""
     logging.info("Обработка команды /create_room")  # Добавлено логирование
@@ -202,7 +224,7 @@ async def create_room(update: Update, context: CallbackContext):
         return
 
     #  API Endpoint URL
-    api_url = f'http://127.0.0.1:8000/api/rooms'  # Используем порт 8000
+    api_url = f'https://Werdsaf.pythonanywhere.com/api/rooms'  # Используем порт 8000
     try:
         headers = {'Content-Type': 'application/json'}
         data = {'creator_id': update.message.from_user.id, 'name': room_name}  # Corrected key to "name"
@@ -219,7 +241,7 @@ async def list_rooms(update: Update, context: CallbackContext):
     logging.info("Обработка команды /list_rooms")  # Добавлено логирование
     try:
         #  API Endpoint URL
-        api_url = f'http://127.0.0.1:8000/api/rooms'  # Используем порт 8000
+        api_url = f'https://Werdsaf.pythonanywhere.com/api/rooms'  # Используем порт 8000
         response = requests.get(api_url)
         response.raise_for_status()
         rooms = response.json()
@@ -236,7 +258,7 @@ async def authenticate_user(update: Update, context: CallbackContext):
     logging.info("Аутентификация пользователя")  # Добавлено логирование
     telegram_id = update.message.from_user.id
     #  API Endpoint URL
-    api_url = f'http://127.0.0.1:8000/api/users/{telegram_id}'  # Используем порт 8000
+    api_url = f'https://Werdsaf.pythonanywhere.com/api/users/{telegram_id}'  # Используем порт 8000
     try:
         response = requests.get(api_url)
         response.raise_for_status()
@@ -267,13 +289,12 @@ async def set_role(update: Update, context: CallbackContext):
         "telegram_id": user_id,
         "display_name": user_name,
         "timezone": timezone,
-        "working_hours_start": start_time.strftime("%H:%M") if start_time else None,
-        "working_hours_end": end_time.strftime("%H:%M") if end_time else None,
-        "role": role
+        "working_hours_start": start_time.strftime("%H:%M") if start_time else None,  # Format time as string
+        "working_hours_end": end_time.strftime("%H:%M") if end_time else None
     }
 
     try:
-        api_url = 'http://127.0.0.1:8000/api/users'  # Используем порт 8000
+        api_url = f'https://Werdsaf.pythonanywhere.com/api/users'  # Используем порт 8000
         headers = {'Content-Type': 'application/json'}
         response = requests.post(api_url, headers=headers, data=json.dumps(user_data))
         response.raise_for_status()
@@ -286,27 +307,6 @@ async def set_role(update: Update, context: CallbackContext):
 
     return ConversationHandler.END
 
-# Add command handler for getting a list of users
-async def show_users(update: Update, context: CallbackContext):
-    """Lists all users and their IDs to the admin."""
-    if not is_admin(update.message.from_user.id):
-        await update.message.reply_text("У вас нет прав для просмотра списка пользователей.")
-        return
-
-    try:
-        api_url = f'http://127.0.0.1:8000/api/users'
-        response = requests.get(api_url)
-        response.raise_for_status()
-        users = response.json()
-        if users:
-            user_list = "\n".join([f"- {user['display_name']} (ID: {user['telegram_id']})" for user in users])
-            await update.message.reply_text(f"Список пользователей:\n{user_list}")
-        else:
-            await update.message.reply_text("Пользователи не найдены.")
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Ошибка при получении списка пользователей: {e}")
-        await update.message.reply_text(f"Произошла ошибка при получении списка пользователей: {e}")
-
 async def post_init(application: ApplicationBuilder):
     logging.info("Бот инициализирован") # Добавлено логирование
     await application.bot.set_my_commands([
@@ -314,7 +314,7 @@ async def post_init(application: ApplicationBuilder):
         ('help', 'Помощь'),
         ('create_room', 'Создать комнату (только для администраторов)'),
         ('list_rooms', 'Список комнат, в которых вы состоите'),
-        ('show_users', 'Посмотреть ID пользователей'),
+        ('list_users', 'Список пользователей (только для администраторов)'), # Add this
     ])
 
 # --- Main ---
@@ -332,7 +332,6 @@ def main():
             SET_TIMEZONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_timezone)],
             SET_WORKING_HOURS: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_working_hours)],
             SET_WORKING_HOURS_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_working_hours_end)],
-            SET_ROLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_role)],
         },
         fallbacks=[CommandHandler('cancel', start)]  # Использовать start для отмены
     )
@@ -342,10 +341,8 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("create_room", create_room))
     application.add_handler(CommandHandler("list_rooms", list_rooms))
-
-    # Добавляем новый обработчик для show_users
-    application.add_handler(CommandHandler("show_users", show_users))
-    logging.info("Все обработчики успешно добавлены")  # Добавлено логирование
+    application.add_handler(CommandHandler("list_users", list_users))  # Add the new handler
+    logging.info("Все обработчики успешно добавлены") # Добавлено логирование
 
     # Замените эту строку (и удалите set_webhook.py!)
     application.run_polling()
