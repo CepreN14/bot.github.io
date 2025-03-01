@@ -5,6 +5,6 @@
 <body>
 <div id="main">
 <h1>Telegram messenger</h1>
-<p> Ленивец </p>
+<h2> Ленивец </h2>
 </budy>
 </html>
