@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat App</title>
+    <title>Chat App Admin Panel</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -13,8 +13,8 @@
             margin: 0;
             padding: 0;
         }
-        #room-select {
-            margin: 20px;
+        #room-select, #user-input, #add-button {
+            margin: 10px;
         }
         #chat {
             width: 80%;
@@ -34,16 +34,20 @@
     </style>
 </head>
 <body>
-    <h1>Chat App</h1>
+    <h1>Chat App Admin Panel</h1>
     <select id="room-select">
         <option value="">Select a room</option>
     </select>
+    <input type="text" id="user-input" placeholder="Enter Telegram ID">
+    <button id="add-button">Add User to Room</button>
     <div id="chat"></div>
     <input type="text" id="message-input" placeholder="Type a message">
     <button id="send-button">Send</button>
 
     <script>
         const roomSelect = document.getElementById('room-select');
+        const userInput = document.getElementById('user-input');
+        const addButton = document.getElementById('add-button');
         const chat = document.getElementById('chat');
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
@@ -91,6 +95,23 @@
             }
         }
 
+        async function addUserToRoom() {
+            const telegramId = userInput.value;
+            const roomName = roomSelect.options[roomSelect.selectedIndex].text;
+            if (telegramId && roomName) {
+                const response = await fetch('http://127.0.0.1:8000/api/add_user_to_room', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ telegram_id: telegramId, room_name: roomName })
+                });
+                const result = await response.json();
+                alert(result.message);
+                userInput.value = '';
+            }
+        }
+
         roomSelect.addEventListener('change', (event) => {
             currentRoomId = event.target.value;
             if (currentRoomId) {
@@ -99,6 +120,7 @@
         });
 
         sendButton.addEventListener('click', sendMessage);
+        addButton.addEventListener('click', addUserToRoom);
 
         fetchRooms();
     </script>
