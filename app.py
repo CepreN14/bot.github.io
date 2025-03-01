@@ -21,9 +21,8 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 CORS(app)  # Enable CORS for all routes
 
-
 class UserRole(Enum):
-    DEFAULT = "default"
+    ADMIN = "admin"
     DEVELOPER = "developer"
     CUSTOMER = "customer"
 
@@ -35,7 +34,7 @@ class User(db.Model):
     timezone = db.Column(db.String(100), nullable=True)
     working_hours_start = db.Column(db.Time, nullable=True)
     working_hours_end = db.Column(db.Time, nullable=True)
-    role = db.Column(db.Enum(UserRole), default=UserRole.DEFAULT)
+    role = db.Column(db.Enum(UserRole), default=UserRole.CUSTOMER)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -56,18 +55,39 @@ class ChatRoom(db.Model):
     creator_id = db.Column(db.Integer)
     name = db.Column(db.String(200))
 
+class Message(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    room_id = db.Column(db.Integer, db.ForeignKey('chat_room.id'))
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    content = db.Column(db.String(500))
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'room_id': self.room_id,
+            'user_id': self.user_id,
+            'content': self.content,
+            'timestamp': str(self.timestamp)
+        }
+
 with app.app_context():
     db.create_all()
 
 @app.route('/api/users', methods=['POST'])
 def create_or_update_user():
     data = request.get_json()
+    logging.info(f"Received data: {data}")
+
     telegram_id = data.get('telegram_id')
     display_name = data.get('display_name')
     timezone = data.get('timezone')
     working_hours_start = data.get('working_hours_start')
     working_hours_end = data.get('working_hours_end')
     role = data.get('role')
+
+    if not telegram_id or not display_name:
+        return jsonify({'message': 'Missing required fields'}), 400
 
     user = User.query.filter_by(telegram_id=telegram_id).first()
 
@@ -104,7 +124,7 @@ def create_or_update_user():
                 timezone=timezone,
                 working_hours_start=datetime.strptime(working_hours_start, '%H:%M').time() if working_hours_start else None,
                 working_hours_end=datetime.strptime(working_hours_end, '%H:%M').time() if working_hours_end else None,
-                role=UserRole[role.upper()] if role else UserRole.DEFAULT
+                role=UserRole[role.upper()] if role else UserRole.CUSTOMER
             )
         except ValueError as e:
             if "Invalid time format" in str(e):
@@ -116,7 +136,7 @@ def create_or_update_user():
                     timezone=timezone,
                     working_hours_start=datetime.strptime(working_hours_start, '%H:%M').time() if working_hours_start else None,
                     working_hours_end=datetime.strptime(working_hours_end, '%H:%M').time() if working_hours_end else None,
-                    role=UserRole[role.upper()] if role else UserRole.DEFAULT
+                    role=UserRole[role.upper()] if role else UserRole.CUSTOMER
                 )
             else:
                 return jsonify({'message': str(e)}), 400
@@ -142,6 +162,9 @@ def create_room():
     creator_id = data.get('creator_id')
     name = data.get('name')
 
+    if not creator_id or not name:
+        return jsonify({'message': 'Missing required fields'}), 400
+
     new_room = ChatRoom(creator_id=creator_id, name=name)
     db.session.add(new_room)
     db.session.commit()
@@ -149,8 +172,40 @@ def create_room():
 
 @app.route('/api/rooms', methods=['GET'])
 def list_rooms():
-    rooms = ChatRoom.query.all()
-    return jsonify([{'id': room.id, 'creator_id': room.creator_id, 'name': room.name} for room in rooms]), 200
+    try:
+        rooms = ChatRoom.query.all()
+        room_list = [{'id': room.id, 'creator_id': room.creator_id, 'name': room.name} for room in rooms]
+        logging.info(f"Rooms retrieved: {room_list}")
+        return jsonify(room_list), 200
+    except Exception as e:
+        logging.error(f"Error retrieving rooms: {e}")
+        return jsonify({'message': 'Error retrieving rooms'}), 500
+
+@app.route('/api/rooms/<int:room_id>/messages', methods=['GET'])
+def get_room_messages(room_id):
+    try:
+        messages = Message.query.filter_by(room_id=room_id).all()
+        message_list = [message.to_dict() for message in messages]
+        logging.info(f"Messages retrieved for room {room_id}: {message_list}")
+        return jsonify(message_list), 200
+    except Exception as e:
+        logging.error(f"Error retrieving messages: {e}")
+        return jsonify({'message': 'Error retrieving messages'}), 500
+
+@app.route('/api/rooms/<int:room_id>/messages', methods=['POST'])
+def send_message(room_id):
+    data = request.get_json()
+    user_id = data.get('user_id')
+    content = data.get('content')
+
+    if not user_id or not content:
+        return jsonify({'message': 'Missing required fields'}), 400
+
+    new_message = Message(room_id=room_id, user_id=user_id, content=content)
+    db.session.add(new_message)
+    db.session.commit()
+    return jsonify(new_message.to_dict()), 201
 
 if __name__ == '__main__':
-    app.run(debug=True, host="0.0.0.0", port=5000) #port = 5000
+    port = int(os.environ.get("PORT", 8000))  # Используем порт 8000 по умолчанию
+    app.run(debug=True, host="0.0.0.0", port=port)
