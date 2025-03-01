@@ -16,10 +16,10 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL", "sqlite:///./app.db")
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL", "sqlite:///./app.db")  # Use SQLite
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
-CORS(app)  # Enable CORS for all routes
+CORS(app)
 
 class UserRole(Enum):
     ADMIN = "admin"
@@ -71,13 +71,18 @@ class Message(db.Model):
             'timestamp': str(self.timestamp)
         }
 
+class RoomUser(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    room_id = db.Column(db.Integer, db.ForeignKey('chat_room.id'))
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+
 with app.app_context():
     db.create_all()
 
 @app.route('/api/users', methods=['POST'])
 def create_or_update_user():
     data = request.get_json()
-    logging.info(f"Received data: {data}")
+    logging.info(f"Received {data}")
 
     telegram_id = data.get('telegram_id')
     display_name = data.get('display_name')
@@ -156,19 +161,38 @@ def get_user(telegram_id):
     else:
         return jsonify({'message': 'User not found'}), 404
 
+@app.route('/api/users', methods=['GET'])
+def list_users():
+    try:
+        users = User.query.all()
+        user_list = [user.to_dict() for user in users]
+        logging.info(f"Users retrieved: {user_list}")
+        return jsonify(user_list), 200
+    except Exception as e:
+        logging.error(f"Error retrieving users: {e}")
+        return jsonify({'message': 'Error retrieving users'}), 500
+
 @app.route('/api/rooms', methods=['POST'])
 def create_room():
     data = request.get_json()
+    logging.info(f"Received data for create_room: {data}")
+
     creator_id = data.get('creator_id')
     name = data.get('name')
 
     if not creator_id or not name:
+        logging.warning("Missing required fields for create_room")
         return jsonify({'message': 'Missing required fields'}), 400
 
-    new_room = ChatRoom(creator_id=creator_id, name=name)
-    db.session.add(new_room)
-    db.session.commit()
-    return jsonify({'id': new_room.id, 'creator_id': new_room.creator_id, 'name': new_room.name}), 201
+    try:
+        new_room = ChatRoom(creator_id=creator_id, name=name)
+        db.session.add(new_room)
+        db.session.commit()
+        logging.info(f"Room created: {new_room.id, new_room.creator_id, new_room.name}")
+        return jsonify({'id': new_room.id, 'creator_id': new_room.creator_id, 'name': new_room.name}), 201
+    except Exception as e:
+        logging.error(f"Error creating room: {e}")
+        return jsonify({'message': 'Error creating room'}), 500
 
 @app.route('/api/rooms', methods=['GET'])
 def list_rooms():
