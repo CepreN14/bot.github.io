@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Укажите ADMIN_ID непосредственно в bot.py
-ADMIN_ID = "YOUR_ADMIN_ID"  # Замените на ваш Telegram ID
+ADMIN_ID = "1363968775"  # Замените на ваш Telegram ID
 PORT = int(os.environ.get("PORT", 5000))  # Heroku provides PORT env var
 
 # Состояния для диалога
