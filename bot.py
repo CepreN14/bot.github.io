@@ -10,31 +10,41 @@ from datetime import time, datetime
 import logging
 import requests  # Убедитесь, что requests установлен
 import json
-from config import BOT_TOKEN, WEB_APP_URL # Добавьте импорт токена из config.py
-from app import User, UserRole  # Импортируем модели из app.py
+from config import BOT_TOKEN, WEB_APP_URL  # Добавьте импорт токена из config.py
+from app import User, UserRole  # Импортируем модели из app.py (если есть, иначе удалить)
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Укажите ADMIN_ID непосредственно в bot.py
-ADMIN_ID = "1363968775"  # Замените на ваш Telegram ID
+ADMIN_ID = "YOUR_ADMIN_ID"  # Замените на ваш Telegram ID
 PORT = int(os.environ.get("PORT", 5000))  # Heroku provides PORT env var
 
 # Состояния для диалога
-SET_NAME, SET_TIMEZONE, SET_WORKING_HOURS, SET_WORKING_HOURS_END, SET_ROLE, SELECT_ROOM, SELECT_USER = range(7)
+SET_NAME, SET_TIMEZONE, SET_WORKING_HOURS, SET_WORKING_HOURS_END, SET_ROLE = range(5)
 
 # Вспомогательные функции
 def is_admin(user_id):
     return str(user_id) == ADMIN_ID
 
+def get_user_from_api(telegram_id):
+    try:
+        api_url = f'http://127.0.0.1:8000/api/users/{telegram_id}'
+        response = requests.get(api_url)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error fetching user from API: {e}")
+        return None
+
 def is_developer(user_id):
-    user = User.query.filter_by(telegram_id=user_id).first()
-    return user and user.role == UserRole.DEVELOPER
+    user = get_user_from_api(user_id)
+    return user and user.get('role') == "DEVELOPER"
 
 def is_customer(user_id):
-    user = User.query.filter_by(telegram_id=user_id).first()
-    return user and user.role == UserRole.CUSTOMER
+    user = get_user_from_api(user_id)
+    return user and user.get('role') == "CUSTOMER"
 
 # --- Обработчики ---
 async def start(update: Update, context: CallbackContext):
@@ -161,8 +171,8 @@ async def help_command(update: Update, context: CallbackContext):
             "/start - Запуск бота и регистрация\n"
             "/help - Помощь\n"
             "/create_room [Название комнаты] - Создать комнату (только для администраторов)\n"
-            "/add_user_to_room - Добавить пользователя в комнату (только для администраторов)\n"
-            "/list_rooms - Список комнат, в которых вы состоите"
+            "/list_rooms - Список комнат, в которых вы состоите\n"
+            "/show_users - Посмотреть ID пользователей"
         )
     elif is_developer(user_id):
         await update.message.reply_text(
@@ -203,35 +213,6 @@ async def create_room(update: Update, context: CallbackContext):
     except requests.exceptions.RequestException as e:
         logging.error(f"Ошибка при создании комнаты: {e}")
         await update.message.reply_text(f"Произошла ошибка при создании комнаты: {e}")
-
-async def add_user_to_room(update: Update, context: CallbackContext):
-    """Обрабатывает команду /add_user_to_room."""
-    logging.info("Обработка команды /add_user_to_room")  # Добавлено логирование
-    if not is_admin(update.message.from_user.id):
-        await update.message.reply_text("У вас нет прав для добавления пользователей в комнаты.")
-        return
-
-    # Здесь мы предполагаем, что получаем Telegram ID пользователя и название комнаты в качестве параметров
-    # Например: /add_user_to_room 123456789 название_комнаты
-    args = context.args
-    if len(args) != 2:
-        await update.message.reply_text("Пожалуйста, укажите Telegram ID пользователя и название комнаты после команды /add_user_to_room")
-        return
-
-    telegram_id, room_name = args
-
-    #  API Endpoint URL
-    api_url = f'http://127.0.0.1:8000/api/add_user_to_room'  # Используем порт 8000
-    try:
-        headers = {'Content-Type': 'application/json'}
-        data = {'telegram_id': telegram_id, 'room_name': room_name}
-        response = requests.post(api_url, headers=headers, json=data)
-        response.raise_for_status()
-
-        await update.message.reply_text(f"Пользователь с Telegram ID '{telegram_id}' успешно добавлен в комнату '{room_name}'!")
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Ошибка при добавлении пользователя в комнату: {e}")
-        await update.message.reply_text(f"Произошла ошибка при добавлении пользователя: {e}")
 
 async def list_rooms(update: Update, context: CallbackContext):
     """Обрабатывает команду /list_rooms."""
@@ -305,37 +286,26 @@ async def set_role(update: Update, context: CallbackContext):
 
     return ConversationHandler.END
 
-async def select_room(update: Update, context: CallbackContext):
-    """Обрабатывает выбор комнаты для добавления пользователя."""
-    logging.info("Обработка выбора комнаты")  # Добавлено логирование
-    context.user_data['selected_room'] = update.message.text
-    await update.message.reply_text("Теперь введите Telegram ID пользователя, которого хотите добавить в комнату.")
-    return SELECT_USER
+# Add command handler for getting a list of users
+async def show_users(update: Update, context: CallbackContext):
+    """Lists all users and their IDs to the admin."""
+    if not is_admin(update.message.from_user.id):
+        await update.message.reply_text("У вас нет прав для просмотра списка пользователей.")
+        return
 
-async def select_user(update: Update, context: CallbackContext):
-    """Обрабатывает выбор пользователя для добавления в комнату."""
-    logging.info("Обработка выбора пользователя")  # Добавлено логирование
-    telegram_id = update.message.text
-    room_name = context.user_data.get('selected_room')
-
-    if not room_name:
-        await update.message.reply_text("Пожалуйста, сначала выберите комнату.")
-        return SELECT_ROOM
-
-    #  API Endpoint URL
-    api_url = f'http://127.0.0.1:8000/api/add_user_to_room'  # Используем порт 8000
     try:
-        headers = {'Content-Type': 'application/json'}
-        data = {'telegram_id': telegram_id, 'room_name': room_name}
-        response = requests.post(api_url, headers=headers, json=data)
+        api_url = f'http://127.0.0.1:8000/api/users'
+        response = requests.get(api_url)
         response.raise_for_status()
-
-        await update.message.reply_text(f"Пользователь с Telegram ID '{telegram_id}' успешно добавлен в комнату '{room_name}'!")
+        users = response.json()
+        if users:
+            user_list = "\n".join([f"- {user['display_name']} (ID: {user['telegram_id']})" for user in users])
+            await update.message.reply_text(f"Список пользователей:\n{user_list}")
+        else:
+            await update.message.reply_text("Пользователи не найдены.")
     except requests.exceptions.RequestException as e:
-        logging.error(f"Ошибка при добавлении пользователя в комнату: {e}")
-        await update.message.reply_text(f"Произошла ошибка при добавлении пользователя: {e}")
-
-    return ConversationHandler.END
+        logging.error(f"Ошибка при получении списка пользователей: {e}")
+        await update.message.reply_text(f"Произошла ошибка при получении списка пользователей: {e}")
 
 async def post_init(application: ApplicationBuilder):
     logging.info("Бот инициализирован") # Добавлено логирование
@@ -343,8 +313,8 @@ async def post_init(application: ApplicationBuilder):
         ('start', 'Запустить веб-приложение'),
         ('help', 'Помощь'),
         ('create_room', 'Создать комнату (только для администраторов)'),
-        ('add_user_to_room', 'Добавить пользователя в комнату (только для администраторов)'),
         ('list_rooms', 'Список комнат, в которых вы состоите'),
+        ('show_users', 'Посмотреть ID пользователей'),
     ])
 
 # --- Main ---
@@ -363,8 +333,6 @@ def main():
             SET_WORKING_HOURS: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_working_hours)],
             SET_WORKING_HOURS_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_working_hours_end)],
             SET_ROLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_role)],
-            SELECT_ROOM: [MessageHandler(filters.TEXT & ~filters.COMMAND, select_room)],
-            SELECT_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, select_user)],
         },
         fallbacks=[CommandHandler('cancel', start)]  # Использовать start для отмены
     )
@@ -373,9 +341,11 @@ def main():
     application.add_handler(conv_handler)
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("create_room", create_room))
-    application.add_handler(CommandHandler("add_user_to_room", add_user_to_room))
     application.add_handler(CommandHandler("list_rooms", list_rooms))
-    logging.info("Все обработчики успешно добавлены") # Добавлено логирование
+
+    # Добавляем новый обработчик для show_users
+    application.add_handler(CommandHandler("show_users", show_users))
+    logging.info("Все обработчики успешно добавлены")  # Добавлено логирование
 
     # Замените эту строку (и удалите set_webhook.py!)
     application.run_polling()
