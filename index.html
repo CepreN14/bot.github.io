@@ -13,7 +13,7 @@
             margin: 0;
             padding: 0;
         }
-        #room-select, #user-input, #add-button, #user-list {
+        #room-select, #user-input, #add-button {
             margin: 10px;
         }
         #chat {
@@ -90,7 +90,6 @@
                 messageInput.value = '';
             }
         }
-
         roomSelect.addEventListener('change', (event) => {
             currentRoomId = event.target.value;
             if (currentRoomId) {
