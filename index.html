@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat App Admin Panel</title>
     <style>
-        background-color #FF0000
         body {
             font-family: Arial, sans-serif;
             display: flex;
@@ -39,7 +38,7 @@
     <select id="room-select">
         <option value="">Select a room</option>
     </select>
-    <input type="text" id="user-input" placeholder="Enter Telegram ID">
+    <input type="text" id="user-input" placeholder="Enter User ID">
     <button id="add-button">Add User to Room</button>
     <div id="user-list">
         <h2>User List</h2>
@@ -102,15 +101,15 @@
         }
 
         async function addUserToRoom() {
-            const telegramId = userInput.value;
+            const userId = userInput.value;
             const roomName = roomSelect.options[roomSelect.selectedIndex].text;
-            if (telegramId && roomName) {
+            if (userId && roomName) {
                 const response = await fetch('http://127.0.0.1:8000/api/add_user_to_room', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ telegram_id: telegramId, room_name: roomName })
+                    body: JSON.stringify({ user_id: userId, room_name: roomName })
                 });
                 const result = await response.json();
                 alert(result.message);
@@ -124,7 +123,7 @@
             userListItems.innerHTML = '';
             users.forEach(user => {
                 const userItem = document.createElement('li');
-                userItem.textContent = `${user.display_name} (Telegram ID: ${user.telegram_id})`;
+                userItem.textContent = `${user.display_name} (ID: ${user.id})`;
                 userListItems.appendChild(userItem);
             });
         }
