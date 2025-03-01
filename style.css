@@ -1,0 +1,14 @@
+/* web_app/style.css */
+body {
+    font-family: sans-serif;
+}
+
+#rooms {
+    margin-top: 20px;
+}
+
+.room {
+    padding: 10px;
+    border: 1px solid #ccc;
+    margin-bottom: 5px;
+}
