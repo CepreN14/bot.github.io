@@ -1,17 +1,106 @@
-<!-- web_app/index.html -->
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Telegram Web App</title>
-    <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 0;
+        }
+        #room-select {
+            margin: 20px;
+        }
+        #chat {
+            width: 80%;
+            height: 400px;
+            border: 1px solid #ccc;
+            overflow-y: scroll;
+            margin-bottom: 20px;
+        }
+        #message-input {
+            width: 80%;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+        #send-button {
+            padding: 10px 20px;
+        }
+    </style>
 </head>
 <body>
-    <h1>Леха сделай комнаты...</h1>
-    <h2>Список комнат</h2>
-    <div id="rooms">
-        <!-- Room List -->
-    </div>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="script.js"></script>
+    <h1>Chat App</h1>
+    <select id="room-select">
+        <option value="">Select a room</option>
+    </select>
+    <div id="chat"></div>
+    <input type="text" id="message-input" placeholder="Type a message">
+    <button id="send-button">Send</button>
+
+    <script>
+        const roomSelect = document.getElementById('room-select');
+        const chat = document.getElementById('chat');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+
+        let currentRoomId = null;
+        let userId = 1; // Replace with actual user ID
+
+        async function fetchRooms() {
+            const response = await fetch('http://127.0.0.1:8000/api/rooms');
+            const rooms = await response.json();
+            rooms.forEach(room => {
+                const option = document.createElement('option');
+                option.value = room.id;
+                option.textContent = room.name;
+                roomSelect.appendChild(option);
+            });
+        }
+
+        async function fetchMessages(roomId) {
+            const response = await fetch(`http://127.0.0.1:8000/api/rooms/${roomId}/messages`);
+            const messages = await response.json();
+            chat.innerHTML = '';
+            messages.forEach(message => {
+                const messageDiv = document.createElement('div');
+                messageDiv.textContent = `${message.user_id}: ${message.content}`;
+                chat.appendChild(messageDiv);
+            });
+        }
+
+        async function sendMessage() {
+            const content = messageInput.value;
+            if (content && currentRoomId) {
+                const response = await fetch(`http://127.0.0.1:8000/api/rooms/${currentRoomId}/messages`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ user_id: userId, content })
+                });
+                const message = await response.json();
+                const messageDiv = document.createElement('div');
+                messageDiv.textContent = `${message.user_id}: ${message.content}`;
+                chat.appendChild(messageDiv);
+                messageInput.value = '';
+            }
+        }
+
+        roomSelect.addEventListener('change', (event) => {
+            currentRoomId = event.target.value;
+            if (currentRoomId) {
+                fetchMessages(currentRoomId);
+            }
+        });
+
+        sendButton.addEventListener('click', sendMessage);
+
+        fetchRooms();
+    </script>
 </body>
 </html>
