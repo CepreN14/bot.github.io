@@ -10,16 +10,15 @@ from datetime import time, datetime
 import logging
 import requests  # Убедитесь, что requests установлен
 import json
-
-load_dotenv()
+from config import BOT_TOKEN, WEB_APP_URL # Добавьте импорт токена из config.py
+from app import User, UserRole  # Импортируем модели из app.py
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
-BOT_TOKEN = os.getenv("7872778132:AAHFRpdle_49m3xFVxt6xwcRwGXNgQ8q0r8")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "1363968775"))
-WEB_APP_URL = os.getenv("https://cepren14.github.io/mneLen/")
+# Укажите ADMIN_ID непосредственно в bot.py
+ADMIN_ID = "1363968775"  # Замените на ваш Telegram ID
 PORT = int(os.environ.get("PORT", 5000))  # Heroku provides PORT env var
 
 # Состояния для диалога
@@ -27,7 +26,15 @@ SET_NAME, SET_TIMEZONE, SET_WORKING_HOURS, SET_WORKING_HOURS_END, SET_ROLE = ran
 
 # Вспомогательные функции
 def is_admin(user_id):
-    return user_id == ADMIN_ID
+    return str(user_id) == ADMIN_ID
+
+def is_developer(user_id):
+    user = User.query.filter_by(telegram_id=user_id).first()
+    return user and user.role == UserRole.DEVELOPER
+
+def is_customer(user_id):
+    user = User.query.filter_by(telegram_id=user_id).first()
+    return user and user.role == UserRole.CUSTOMER
 
 # --- Обработчики ---
 async def start(update: Update, context: CallbackContext):
@@ -52,7 +59,7 @@ async def start(update: Update, context: CallbackContext):
                       f"Нажмите кнопку, чтобы открыть веб-приложение:"
 
     if not WEB_APP_URL:
-        await update.message.reply_text("Веб-приложение не настроено. Проверьте .env файл.")
+        await update.message.reply_text("Веб-приложение не настроено. Проверьте файл config.py.")
         return ConversationHandler.END  # Завершить диалог, если нет URL веб-приложения
 
     keyboard = [
@@ -130,7 +137,7 @@ async def set_working_hours_end(update: Update, context: CallbackContext):
         # Вызов API Flask backend
         try:
             #  API Endpoint URL
-            api_url = 'http://127.0.0.1:5000/api/users' #port=5000
+            api_url = 'http://127.0.0.1:8000/api/users'  # Используем порт 8000
             headers = {'Content-Type': 'application/json'}
             response = requests.post(api_url, headers=headers, data=json.dumps(user_data))
             response.raise_for_status()  # Вызвать исключение для плохих кодов статуса
@@ -147,14 +154,30 @@ async def set_working_hours_end(update: Update, context: CallbackContext):
 async def help_command(update: Update, context: CallbackContext):
     """Обрабатывает команду /help."""
     logging.info("Обработка команды /help")  # Добавлено логирование
-    await update.message.reply_text(
-        "Доступные команды:\n"
-        "/start - Запуск бота и регистрация\n"
-        "/help - Помощь\n"
-        "/create_room [Название комнаты] - Создать комнату (только для администраторов)\n"
-        "/add_user_to_room - Добавить пользователя в комнату (только для администраторов)\n"
-        "/list_rooms - Список комнат, в которых вы состоите"
-    )
+    user_id = update.message.from_user.id
+    if is_admin(user_id):
+        await update.message.reply_text(
+            "Доступные команды:\n"
+            "/start - Запуск бота и регистрация\n"
+            "/help - Помощь\n"
+            "/create_room [Название комнаты] - Создать комнату (только для администраторов)\n"
+            "/add_user_to_room - Добавить пользователя в комнату (только для администраторов)\n"
+            "/list_rooms - Список комнат, в которых вы состоите"
+        )
+    elif is_developer(user_id):
+        await update.message.reply_text(
+            "Доступные команды:\n"
+            "/start - Запуск бота и регистрация\n"
+            "/help - Помощь\n"
+            "/list_rooms - Список комнат, в которых вы состоите"
+        )
+    elif is_customer(user_id):
+        await update.message.reply_text(
+            "Доступные команды:\n"
+            "/start - Запуск бота и регистрация\n"
+            "/help - Помощь\n"
+            "/list_rooms - Список комнат, в которых вы состоите"
+        )
 
 async def create_room(update: Update, context: CallbackContext):
     """Обрабатывает команду /create_room."""
@@ -169,7 +192,7 @@ async def create_room(update: Update, context: CallbackContext):
         return
 
     #  API Endpoint URL
-    api_url = f'http://127.0.0.1:5000/api/rooms' #port=5000
+    api_url = f'http://127.0.0.1:8000/api/rooms'  # Используем порт 8000
     try:
         headers = {'Content-Type': 'application/json'}
         data = {'creator_id': update.message.from_user.id, 'name': room_name}  # Corrected key to "name"
@@ -198,7 +221,7 @@ async def add_user_to_room(update: Update, context: CallbackContext):
     user_name, room_name = args
 
     #  API Endpoint URL
-    api_url = f'http://127.0.0.1:5000/api/add_user_to_room' #port=5000
+    api_url = f'http://127.0.0.1:8000/api/add_user_to_room'  # Используем порт 8000
     try:
         headers = {'Content-Type': 'application/json'}
         data = {'user_name': user_name, 'room_name': room_name}
@@ -215,12 +238,13 @@ async def list_rooms(update: Update, context: CallbackContext):
     logging.info("Обработка команды /list_rooms")  # Добавлено логирование
     try:
         #  API Endpoint URL
-        api_url = f'http://127.0.0.1:5000/api/rooms' #port=5000
+        api_url = f'http://127.0.0.1:8000/api/rooms'  # Используем порт 8000
         response = requests.get(api_url)
         response.raise_for_status()
         rooms = response.json()
         room_list = "\n".join([f"- {room['name']}" for room in rooms])
         await update.message.reply_text(f"Вы состоите в следующих комнатах:\n{room_list}")
+        logging.info(f"Rooms listed: {room_list}")
 
     except requests.exceptions.RequestException as e:
         logging.error(f"Ошибка при получении списка комнат: {e}")
@@ -231,7 +255,7 @@ async def authenticate_user(update: Update, context: CallbackContext):
     logging.info("Аутентификация пользователя")  # Добавлено логирование
     telegram_id = update.message.from_user.id
     #  API Endpoint URL
-    api_url = f'http://127.0.0.1:5000/api/users/{telegram_id}' #port=5000
+    api_url = f'http://127.0.0.1:8000/api/users/{telegram_id}'  # Используем порт 8000
     try:
         response = requests.get(api_url)
         response.raise_for_status()
@@ -268,7 +292,7 @@ async def set_role(update: Update, context: CallbackContext):
     }
 
     try:
-        api_url = 'http://127.0.0.1:5000/api/users' #port=5000
+        api_url = 'http://127.0.0.1:8000/api/users'  # Используем порт 8000
         headers = {'Content-Type': 'application/json'}
         response = requests.post(api_url, headers=headers, data=json.dumps(user_data))
         response.raise_for_status()
@@ -319,13 +343,10 @@ def main():
     application.add_handler(CommandHandler("list_rooms", list_rooms))
     logging.info("Все обработчики успешно добавлены") # Добавлено логирование
 
-    # Set webhook
-    application.run_webhook(listen="0.0.0.0",
-                          port=PORT,
-                          url_path=BOT_TOKEN,
-                          webhook_url=f"https://Werdsaf.pythonanywhere.com/{BOT_TOKEN}") # Замените на ваш URL
+    # Замените эту строку (и удалите set_webhook.py!)
+    application.run_polling()
 
-    logging.info("Бот запущен в режиме webhook") # Добавлено логирование
+    logging.info("Бот запущен в режиме polling")
 
 if __name__ == '__main__':
     main()
