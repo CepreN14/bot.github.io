@@ -170,7 +170,7 @@ def list_users():
         return jsonify(user_list), 200
     except Exception as e:
         logging.error(f"Error retrieving users: {e}")
-        return jsonify({'message': 'Error retrieving users'}), 500
+        return jsonify({'message': f'Error retrieving users: {str(e)}'}), 500
 
 @app.route('/api/rooms', methods=['POST'])
 def create_room():
